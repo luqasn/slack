@@ -102,35 +102,32 @@ func (api *Client) PostMessageContext(ctx context.Context, channel, text string,
 	return respChannel, respTimestamp, err
 }
 
+// PostMessageEphemeral sends an ephemeral message to specific user in a channel.
+// Message is escaped by default according to https://api.slack.com/docs/formatting
+// Use http://davestevens.github.io/slack-message-builder/ to help crafting your message.
+func (api *Client) PostMessageEphemeral(channel, user string, text string, params PostMessageParameters) (string, string, error) {
+	respChannel, respTimestamp, err := api.PostEphemeralContext(
+		context.Background(),
+		channel,
+		user,
+		MsgOptionText(text, params.EscapeText),
+		MsgOptionAttachments(params.Attachments...),
+		MsgOptionPostMessageParameters(params),
+	)
+	return respChannel, respTimestamp, err
+}
+
 // PostEphemeral sends an ephemeral message to a user in a channel.
 // Message is escaped by default according to https://api.slack.com/docs/formatting
 // Use http://davestevens.github.io/slack-message-builder/ to help crafting your message.
-func (api *Client) PostEphemeral(channel, userID string, options ...MsgOption) (string, error) {
-	options = append(options, MsgOptionPostEphemeral())
-	return api.PostEphemeralContext(
-		context.Background(),
+func (api *Client) PostEphemeralContext(ctx context.Context, channel, userID string, options ...MsgOption) (string, string, error) {
+	options = append(options, MsgOptionPostEphemeral(userID))
+	respChannel, respTimestamp, _, err := api.SendMessageContext(
+		ctx,
 		channel,
-		userID,
 		options...,
 	)
-}
-
-// PostEphemeralContext sends an ephemeal message to a user in a channel with a custom context
-// For more details, see PostEphemeral documentation
-func (api *Client) PostEphemeralContext(ctx context.Context, channel, userID string, options ...MsgOption) (string, error) {
-	path, values, err := ApplyMsgOptions(api.config.token, channel, options...)
-	if err != nil {
-		return "", err
-	}
-
-	values.Add("user", userID)
-
-	response, err := chatRequest(ctx, path, values, api.debug)
-	if err != nil {
-		return "", err
-	}
-
-	return response.Timestamp, nil
+	return respChannel, respTimestamp, err
 }
 
 // UpdateMessage updates a message in a channel
@@ -226,10 +223,11 @@ func MsgOptionPost() MsgOption {
 }
 
 // MsgOptionPostEphemeral posts an ephemeral message
-func MsgOptionPostEphemeral() MsgOption {
+func MsgOptionPostEphemeral(userID string) MsgOption {
 	return func(config *sendConfig) error {
 		config.mode = chatPostEphemeral
-		config.values.Del("ts")
+		config.values.Add("user", userID)
+		//		config.values.Del("ts")
 		return nil
 	}
 }
